@@ -24,12 +24,8 @@
 #' GetSingleInputApcs(fittedLm, df, "x2", c("x1", "x3"))
 GetSingleInputApcs <- function(predictionFunction, X, u, v, ...) {
   pairs <- GetPairs(X, u, v, ...)
-  return(
-    list(PerUnitInput.Signed = ComputeApcFromPairs(predictionFunction, pairs, u, v),
-         PerUnitInput.Absolute = ComputeApcFromPairs(predictionFunction, pairs, u, v, absolute=TRUE),
-         Impact.Signed = ComputeApcFromPairs(predictionFunction, pairs, u, v, impact=TRUE),
-         Impact.Absolute = ComputeApcFromPairs(predictionFunction, pairs, u, v, absolute=TRUE, impact=TRUE))
-  )
+  return(ComputeApcFromPairs(predictionFunction, pairs, u, v))
+
 }
 
 
