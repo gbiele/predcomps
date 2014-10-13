@@ -39,11 +39,22 @@ GetSingleInputApcs <- function(predictionFunction, X, u, v, ...) {
 ComputeApcFromPairs <- function(predictionFunction, pairs, u, v, absolute=FALSE, impact=FALSE) {
   uNew <- paste(u,".B",sep="")
   ComparisonDF <- GetComparisonDFFromPairs(predictionFunction, pairs, u, v)
-  absoluteOrIdentity <- if (absolute) abs else identity
   uDiff <- ComparisonDF[[uNew]] - ComparisonDF[[u]]
-  denom <- if (impact) sum(ComparisonDF$Weight) else sum(ComparisonDF$Weight * uDiff * sign(uDiff))
-  Apc <- sum(absoluteOrIdentity(ComparisonDF$Weight * (ComparisonDF$yHat2 - ComparisonDF$yHat1) * sign(uDiff))) / denom
-  return(Apc)
+  
+  denom_apc = sum(ComparisonDF$Weight * uDiff * sign(uDiff))
+  denom_impact = sum(ComparisonDF$Weight)
+  numerat_abs = abs(sum(ComparisonDF$Weight * (ComparisonDF$yHat2 - ComparisonDF$yHat1) * sign(uDiff)))
+  numerat_ident = sum(ComparisonDF$Weight * (ComparisonDF$yHat2 - ComparisonDF$yHat1) * sign(uDiff))
+  
+  apc = numerat_ident / denom_apc
+  apc_abs = numerat_abs / denom_apc
+  impact = numerat_ident / denom_impact
+  impact_abs = numerat_abs / denom_impact
+  
+  return(list(PerUnitInput.Signed = apc,
+              PerUnitInput.Absolute = apc_abs,
+              Impact.Signed = impact,
+              Impact.Absolute = impact_abs))
 }
 
 
