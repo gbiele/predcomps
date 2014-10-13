@@ -23,7 +23,10 @@
 #' fittedLm
 #' GetSingleInputApcs(fittedLm, df, "x2", c("x1", "x3"))
 GetSingleInputApcs <- function(predictionFunction, X, u, v, ...) {
-  pairs <- GetPairs(X, u, v, ...)
+  # make X to a data table
+  pairs <- GetPairs(data.table(X), u, v, ...)
+  # instead of calling ComputeApcFromPairs multiple times
+  # call it only once and get signed and unsigned APC and impact values at the same time
   return(ComputeApcFromPairs(predictionFunction, pairs, u, v))
 
 }
@@ -32,15 +35,15 @@ GetSingleInputApcs <- function(predictionFunction, X, u, v, ...) {
 #' ComputeApcFromPairs
 #' 
 #' @export
-ComputeApcFromPairs <- function(predictionFunction, pairs, u, v, absolute=FALSE, impact=FALSE) {
+ComputeApcFromPairs <- function(predictionFunction, pairs, u, v) {
   uNew <- paste(u,".B",sep="")
   ComparisonDF <- GetComparisonDFFromPairs(predictionFunction, pairs, u, v)
   uDiff <- ComparisonDF[[uNew]] - ComparisonDF[[u]]
   
   denom_apc = sum(ComparisonDF$Weight * uDiff * sign(uDiff))
   denom_impact = sum(ComparisonDF$Weight)
-  numerat_abs = abs(sum(ComparisonDF$Weight * (ComparisonDF$yHat2 - ComparisonDF$yHat1) * sign(uDiff)))
   numerat_ident = sum(ComparisonDF$Weight * (ComparisonDF$yHat2 - ComparisonDF$yHat1) * sign(uDiff))
+  numerat_abs = abs(numerat_ident)
   
   apc = numerat_ident / denom_apc
   apc_abs = numerat_abs / denom_apc
