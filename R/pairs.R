@@ -40,43 +40,75 @@ GetPairs <- function(X, u, v,
       stop(sprintf("Sorry, column %s is of class %s. I can only deal with integer and numeric types for now.", columnName, columnClass))
     }
   }
-  
+  ######################## start updated section (GB) ###############################
   if (!is.null(numForTransitionStart)) {
-    X1 <- X[sample.int(nrow(X), size=numForTransitionStart), c(v,u)] 
+  # I just named rows like this to be sure that I calculate distances
+  # for the sampling case correctly
+    s1 <- sample.int(nrow(X), size=numForTransitionStart) 
+    X1 <- X[s1, c(v,u), with = F]
+    X1$OriginalRowNumber <- s1
   } else {
-    X1 <- X[c(v,u)]
+    X1 <- X[,c(v,u), with = F]
+    s1 <- 1:1:nrow(X1)
   }
+  X1$OriginalRowNumber <- s1
   
   if (!is.null(numForTransitionEnd)) {
-    X2 <- X[sample.int(nrow(X), size=numForTransitionEnd), c(v,u)]
+    s2 <- sample.int(nrow(X), size=numForTransitionEnd)
+    X2 <- X[s2, c(v,u), with = F]
+    X2$OriginalRowNumber.B <- s2
   } else {
-    X2 <- X[c(v,u)]
+    X2 <- X[,c(v,u), with = F]
+    s2 <- 1:nrow(X)
+  }
+  X1$OriginalRowNumber <- s1
+  X2$OriginalRowNumber.B <- s2
+  
+  
+  vMatrix1 <- as.matrix(X1[,v, with = F])
+  vMatrix2 <- as.matrix(X2[,v, with = F])
+  vMatrix = as.matrix(X[unique(c(s1,s2)),v,with = F])
+  covV=cov(vMatrix)
+  # because memory is an issue for my datasets, 
+  # I delete variabeles if they are no longer needed
+  rm(vMatrix) 
+  
+  # the maha function from mvnfast is much faster than standard R
+  # but the majof speed gain is not made here
+  distMatrix <- apply(vMatrix1, 1, function(row) maha(vMatrix2, row, covV))
+  #dim(distMatrix)
+  rm(vMatrix1,vMatrix2,covV)
+  colnames(distMatrix) <- s1
+  rownames(distMatrix) <- s2
+  if (is.null(numForTransitionEnd)) {
+    # Here we are saving lots of RAM!
+    # instead of creating distDF for the entire data matrix, 
+    # distDF is formed only from the relevant lower triangular matrix
+    # combnPrim is a fast version of combn, which is relevant for large data sets
+    # minor issues: combnPrim comes with gRbase, which can only be installed via bioconductor
+    distDF = data.table(t(rbind((combnPrim(1:dim(X1)[1],2)),distMatrix[lower.tri(distMatrix)])))
+    } else {
+    # now the more complicated solution for sampled pairs
+    # this is base R, I haven't checked if this could be speeded up
+      distDF = data.table(t(rbind(as.vector(t(matrix(rep(s1,length(s2)),nrow = length(s1),ncol = length(s2)))),
+                                  as.vector(matrix(rep(s2,length(s1)),nrow = length(s2),ncol = length(s1))),
+                                  as.vector(distMatrix))))
   }
   
-  X1$OriginalRowNumber <- 1:nrow(X1)
-  X2$OriginalRowNumber.B <- 1:nrow(X2)
+  rm(distMatrix)
+  setnames(distDF,names(distDF),c("OriginalRowNumber", "OriginalRowNumber.B", "MahalanobisDistance"))
   
-  vMatrix1 <- as.matrix(X1[,v])
-  vMatrix2 <- as.matrix(X2[,v])
-  
-  
-  covV=cov(vMatrix2)
-  
-  distMatrix <- apply(vMatrix1, 1, function(row) mahalanobis(vMatrix2, row, covV))
-  dim(distMatrix)
-  
-  colnames(distMatrix) <- 1:ncol(distMatrix)
-  rownames(distMatrix) <- 1:nrow(distMatrix)
-  distDF <- as.data.frame(as.table(distMatrix))
-  names(distDF) <- c("OriginalRowNumber.B", "OriginalRowNumber", "MahalanobisDistance")
+  ######################## end updated section (GB) ###############################
+  ### there are still some efficientcy gains below because we use data.tables ####
   
   if (!is.null(onlyIncludeNearestN)) {
     distDF <- distDF %.% 
       group_by(OriginalRowNumber) %.% 
       filter(rank(MahalanobisDistance, ties.method="random") < onlyIncludeNearestN)
   }
-
-  pairs <- merge(X1, distDF, by = "OriginalRowNumber")
+  # note that beceause X1 and distDF are data tables, 
+  # we are calling date.tables merge function here, which is much faster than merging data.frames
+  pairs <- merge(X1, distDF, by = "OriginalRowNumber") 
   pairs <- merge(X2, pairs, by = "OriginalRowNumber.B", suffixes = c(".B", ""))
   pairs$Weight <- 1/(mahalanobisConstantTerm + pairs$MahalanobisDistance)
   
@@ -87,6 +119,10 @@ GetPairs <- function(X, u, v,
   }
   
   # Renormalize weights:
+  # this could also maybe be speeded up by using data.table isteadn of dplyr
+  # then again, the group_by probably collabses redundant rows (sseing this only now. 13. Osctober)
+  # so something like
+  # pairs[, Weight := Weight/sum(Weight)]
   pairs <- pairs %.% group_by(OriginalRowNumber) %.% mutate(Weight = Weight/sum(Weight))
   
   return(data.frame(pairs))
